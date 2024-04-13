@@ -1,5 +1,7 @@
 #include "player.hpp"
 
+#include <libavutil/mem.h>
+
 #include "ffmpeg/exceptions.hpp"
 
 extern "C" {
@@ -22,7 +24,6 @@ extern "C" {
 #include <iostream>
 #include <memory>
 #include <new>
-#include <optional>
 #include <ostream>
 
 namespace OUMP {
@@ -44,9 +45,7 @@ MediaDecoder::MediaDecoder(std::string t_filename)
       m_video_packet(nullptr),
       m_video_frame(nullptr),
       m_audio_codec(nullptr),
-      m_audio_context(nullptr),
-      m_current_pts(0),
-      m_pts_diff(std::nullopt) {
+      m_audio_context(nullptr) {
     // allocate memory for media
     this->m_format_context = avformat_alloc_context();
     if (this->m_format_context == nullptr) {
@@ -226,7 +225,6 @@ std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
     return l_next_frame;
 }
 
-// TODO: error handling
 FrameData::FrameData(AVFrame *t_frame) {
     SwsContext *scaler_ctx =
         sws_getContext(t_frame->width, t_frame->height,
@@ -234,16 +232,25 @@ FrameData::FrameData(AVFrame *t_frame) {
                        t_frame->width, t_frame->height, AV_PIX_FMT_RGB32,
                        SWS_BILINEAR, nullptr, nullptr, nullptr);
 
-    if (!scaler_ctx) {
+    if (scaler_ctx == nullptr) {
         std::cerr << "Couldn't allocate memory for sws ctx" << std::endl;
         throw std::bad_alloc();
     }
 
     AVFrame *l_frame = av_frame_alloc();
+    if (l_frame == nullptr) {
+        std::cerr << "Couldn't allocate memory for a new AVFrame" << std::endl;
+        throw std::bad_alloc();
+    }
     size_t l_frame_size = av_image_get_buffer_size(
         AV_PIX_FMT_RGB32, t_frame->width, t_frame->height, 1);
-    av_image_alloc(l_frame->data, l_frame->linesize, t_frame->width,
-                   t_frame->height, AV_PIX_FMT_RGB32, 1);
+    auto l_alloc_result =
+        av_image_alloc(l_frame->data, l_frame->linesize, t_frame->width,
+                       t_frame->height, AV_PIX_FMT_RGB32, 1);
+    if (l_alloc_result < 0) {
+        std::cerr << "Couldn't alloacte memory for a image" << std::endl;
+        throw std::bad_alloc();
+    }
     l_frame->format = AV_PIX_FMT_RGB32;
 
     sws_scale(scaler_ctx, t_frame->data, t_frame->linesize, 0, t_frame->height,
@@ -254,6 +261,7 @@ FrameData::FrameData(AVFrame *t_frame) {
     std::copy(l_frame->data[0], l_frame->data[0] + l_frame_size,
               this->m_image.bits());
 
+    av_freep(&l_frame->data[0]);
     av_frame_free(&l_frame);
     sws_freeContext(scaler_ctx);
 }
