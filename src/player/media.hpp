@@ -2,12 +2,12 @@
 
 #include <qimage.h>
 #include <qobject.h>
+#include <qpainter.h>
 #include <qt/QtCore/qcoreevent.h>
 #include <qtimer.h>
 #include <qtmetamacros.h>
 #include <qwidget.h>
 #include <qwindowdefs.h>
-#include <qpainter.h>
 
 #include <memory>
 
@@ -17,6 +17,9 @@
 namespace OUMP {
 class MediaFrame;
 
+/**
+ * @brief QWidget that displays the media content.
+ */
 class MediaView : public QWidget {
    private:
     std::shared_ptr<EventsHub> m_events;
@@ -28,6 +31,9 @@ class MediaView : public QWidget {
     ~MediaView() = default;
 };
 
+/**
+ * @brief QWidget that actually displays the media content.
+ */
 class MediaFrame : public QWidget {
     Q_OBJECT
    private slots:
@@ -42,8 +48,8 @@ class MediaFrame : public QWidget {
     std::shared_ptr<FrameData> m_current_frame;
     bool m_playing;
 
-    protected:
-        void paintEvent(QPaintEvent *t_event) override;
+   protected:
+    void paintEvent(QPaintEvent* t_event) override;
 
    public:
     MediaFrame(std::shared_ptr<EventsHub> t_events);

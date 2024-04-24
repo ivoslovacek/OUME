@@ -12,6 +12,9 @@
 #include "player/layout.hpp"
 
 namespace OUMP {
+/**
+ * @brief Main application window.
+ */
 class AppWindow : public QMainWindow {
    private:
     std::shared_ptr<EventsHub> m_events;

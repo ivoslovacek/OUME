@@ -9,6 +9,9 @@
 namespace OUMP {
 class OpenFile;
 
+/**
+ * @brief Dropdown "file" menu.
+ */
 class FileMenu : public QMenu {
     Q_OBJECT
    signals:
@@ -27,6 +30,9 @@ class FileMenu : public QMenu {
     ~FileMenu() = default;
 };
 
+/**
+ * @brief QAction that opens a file.
+ */
 class OpenFile : public QAction {
    private:
    public:

@@ -7,6 +7,9 @@
 #include "menubar/file.hpp"
 
 namespace OUMP {
+/**
+ * @brief Application menu bar.
+ */
 class MenuBar : public QMenuBar {
    private:
     std::shared_ptr<EventsHub> m_events;

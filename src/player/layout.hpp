@@ -10,6 +10,9 @@
 #include "player/media.hpp"
 
 namespace OUMP {
+/**
+ * @brief Media player layout.
+ */
 class PlayerLayout : public QVBoxLayout {
    private:
     std::shared_ptr<EventsHub> m_events;

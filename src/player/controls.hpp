@@ -9,6 +9,9 @@
 namespace OUMP {
 class PlayPauseButton;
 
+/**
+ * @brief Media controls layout.
+ */
 class ControlsLayout : public QHBoxLayout {
    private:
     PlayPauseButton* m_play_pause;
@@ -18,6 +21,9 @@ class ControlsLayout : public QHBoxLayout {
     ~ControlsLayout() = default;
 };
 
+/**
+ * @brief Play/Pause button.
+ */
 class PlayPauseButton : public QPushButton {
    private:
     bool m_playing = false;
