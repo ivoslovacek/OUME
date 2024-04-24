@@ -17,7 +17,9 @@ jobs:
         run: doxygen
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./html
 
   deploy:
     environment:
@@ -31,3 +33,7 @@ jobs:
         uses: actions/deploy-pages@v4
         with:
           content: ./html
+
+permissions:
+  pages: write
+  id-token: write
