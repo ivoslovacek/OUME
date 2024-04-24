@@ -4,6 +4,9 @@
 #include <string>
 
 namespace OUMP {
+/**
+ * @brief Exception indicating that a file couldn't be read.
+ */
 class UnreadableFileException : public std::exception {
    private:
     std::string m_what;
