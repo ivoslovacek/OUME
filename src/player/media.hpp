@@ -1,12 +1,12 @@
 #pragma once
 
 #include <qimage.h>
+#include <qlabel.h>
 #include <qobject.h>
 #include <qpainter.h>
 #include <qt/QtCore/qcoreevent.h>
 #include <qtimer.h>
 #include <qtmetamacros.h>
-#include <qwidget.h>
 #include <qwindowdefs.h>
 
 #include <memory>
@@ -15,26 +15,10 @@
 #include "ffmpeg/player.hpp"
 
 namespace OUMP {
-class MediaFrame;
-
-/**
- * @brief QWidget that displays the media content.
- */
-class MediaView : public QWidget {
-   private:
-    std::shared_ptr<EventsHub> m_events;
-    std::shared_ptr<QPainter> m_painter;
-    std::shared_ptr<MediaFrame> m_frame;
-
-   public:
-    MediaView(std::shared_ptr<EventsHub> t_events);
-    ~MediaView() = default;
-};
-
 /**
  * @brief QWidget that actually displays the media content.
  */
-class MediaFrame : public QWidget {
+class MediaFrame : public QLabel {
     Q_OBJECT
    private slots:
     void handleNewFile(QString t_filename);
@@ -47,9 +31,6 @@ class MediaFrame : public QWidget {
     std::shared_ptr<MediaDecoder> m_decoder;
     std::shared_ptr<FrameData> m_current_frame;
     bool m_playing;
-
-   protected:
-    void paintEvent(QPaintEvent* t_event) override;
 
    public:
     MediaFrame(std::shared_ptr<EventsHub> t_events);

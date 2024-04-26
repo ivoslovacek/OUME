@@ -1,6 +1,7 @@
 #include "media.hpp"
 
 #include <qimage.h>
+#include <qlabel.h>
 #include <qpainter.h>
 #include <qsizepolicy.h>
 #include <qtimer.h>
@@ -12,14 +13,8 @@
 #include "ffmpeg/player.hpp"
 
 namespace OUMP {
-MediaView::MediaView(std::shared_ptr<EventsHub> t_events)
-    : QWidget(),
-      m_events(t_events),
-      m_painter(std::make_shared<QPainter>(this)),
-      m_frame(std::make_shared<MediaFrame>(t_events)){};
-
 MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
-    : QWidget(),
+    : QLabel(),
       m_events(t_events),
       m_timer(new QTimer(this)),
       m_decoder(std::shared_ptr<MediaDecoder>()),
@@ -30,7 +25,8 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
 
     connect(this->m_timer, &QTimer::timeout, this, &MediaFrame::onTick);
     this->m_timer->start(41);
-    this->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+    this->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    this->setScaledContents(true);
 };
 
 void MediaFrame::handleNewFile(QString t_filename) {
@@ -45,15 +41,6 @@ void MediaFrame::onTick() {
 
     auto l_tmp = this->m_current_frame;
     this->m_current_frame = this->m_decoder->nextFrame();
-    this->repaint();
-}
-
-void MediaFrame::paintEvent(QPaintEvent *t_event) {
-    if (this->m_current_frame != nullptr) {
-        QPainter l_painter(this);
-        l_painter.drawImage(QRect(0, 0, 1280, 720),
-                            this->m_current_frame->getImage());
-    }
-    QWidget::paintEvent(t_event);
+    this->setPixmap(QPixmap::fromImage(this->m_current_frame->getImage()));
 }
 }  // namespace OUMP
