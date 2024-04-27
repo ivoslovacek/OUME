@@ -33,6 +33,10 @@ void log_callback(void *, int, const char *fmt, va_list vl) {
     vprintf(fmt, vl);
 }
 #endif
+bool FrameDataComparator::operator()(const std::shared_ptr<FrameData> &a,
+                                     const std::shared_ptr<FrameData> &b) {
+    return a->getPts() > b->getPts();
+}
 
 MediaDecoder::MediaDecoder(QString t_filename)
     : MediaDecoder(t_filename.toStdString()) {}
@@ -207,12 +211,12 @@ std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
         return std::shared_ptr<FrameData>();
     }
 
-    auto l_next_frame = this->m_frame_queue.front();
+    auto l_next_frame = this->m_frame_queue.top();
     this->m_frame_queue.pop();
     return l_next_frame;
 }
 
-FrameData::FrameData(AVFrame *t_frame) {
+FrameData::FrameData(AVFrame *t_frame) : m_pts(t_frame->pts) {
     SwsContext *scaler_ctx =
         sws_getContext(t_frame->width, t_frame->height,
                        static_cast<AVPixelFormat>(t_frame->format),

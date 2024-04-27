@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec.h>
@@ -16,6 +17,14 @@ extern "C" {
 
 namespace OUMP {
 class FrameData;
+/**
+ * @brief FrameDataComparator
+ */
+struct FrameDataComparator {
+   public:
+    bool operator()(const std::shared_ptr<FrameData> &a,
+                    const std::shared_ptr<FrameData> &b);
+};
 
 /**
  * @brief A class for decoding media.
@@ -64,7 +73,10 @@ class MediaDecoder {
     /**
      * @brief Video frame queue for the media.
      */
-    std::queue<std::shared_ptr<FrameData>> m_frame_queue;
+    std::priority_queue<std::shared_ptr<FrameData>,
+                        std::vector<std::shared_ptr<FrameData>>,
+                        FrameDataComparator>
+        m_frame_queue;
 
    public:
     /**
@@ -120,6 +132,11 @@ class FrameData {
      */
     QImage m_image;
 
+    /**
+     * @brief int64_t containing the presentation time stamp of the frame.
+     */
+    int64_t m_pts;
+
    public:
     /**
      * @brief Constructor for FrameData.
@@ -144,6 +161,13 @@ class FrameData {
      *
      * @return A const reference to the QImage containing the decoded image.
      */
-    inline const QImage &getImage() const { return m_image; }
+    inline const QImage &getImage() const { return this->m_image; }
+
+    /**
+     * @brief Getter function for the frame presentation timestamp.
+     *
+     * @return int64_t containing the presentation timestamp.
+     */
+    inline int64_t getPts() const { return this->m_pts; }
 };
 }  // namespace OUMP
