@@ -230,7 +230,7 @@ FrameData::FrameData(AVFrame *t_frame) {
         sws_getContext(t_frame->width, t_frame->height,
                        static_cast<AVPixelFormat>(t_frame->format),
                        t_frame->width, t_frame->height, AV_PIX_FMT_RGB32,
-                       SWS_BILINEAR, nullptr, nullptr, nullptr);
+                       SWS_BICUBIC, nullptr, nullptr, nullptr);
 
     if (scaler_ctx == nullptr) {
         std::cerr << "Couldn't allocate memory for sws ctx" << std::endl;

@@ -7,6 +7,7 @@
 #include <qt/QtCore/qcoreevent.h>
 #include <qtimer.h>
 #include <qtmetamacros.h>
+#include <qwidget.h>
 #include <qwindowdefs.h>
 
 #include <memory>
@@ -35,5 +36,7 @@ class MediaFrame : public QLabel {
    public:
     MediaFrame(std::shared_ptr<EventsHub> t_events);
     ~MediaFrame() = default;
+
+    void resizeEvent(QResizeEvent* t_event) override;
 };
 }  // namespace OUMP

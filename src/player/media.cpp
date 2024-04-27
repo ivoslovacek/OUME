@@ -2,6 +2,7 @@
 
 #include <qimage.h>
 #include <qlabel.h>
+#include <qnamespace.h>
 #include <qpainter.h>
 #include <qsizepolicy.h>
 #include <qtimer.h>
@@ -26,7 +27,7 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
     connect(this->m_timer, &QTimer::timeout, this, &MediaFrame::onTick);
     this->m_timer->start(41);
     this->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
-    this->setScaledContents(true);
+    this->setAlignment(Qt::AlignCenter);
 };
 
 void MediaFrame::handleNewFile(QString t_filename) {
@@ -41,6 +42,20 @@ void MediaFrame::onTick() {
 
     auto l_tmp = this->m_current_frame;
     this->m_current_frame = this->m_decoder->nextFrame();
-    this->setPixmap(QPixmap::fromImage(this->m_current_frame->getImage()));
+
+    auto l_pixmap =
+        QPixmap::fromImage(this->m_current_frame->getImage())
+            .scaledToHeight(this->height(), Qt::SmoothTransformation);
+
+    this->setPixmap(l_pixmap);
 }
+
+void MediaFrame::resizeEvent(QResizeEvent* t_event) {
+    auto l_pixmap =
+        this->pixmap().scaledToHeight(this->height(), Qt::SmoothTransformation);
+    this->setPixmap(l_pixmap);
+
+    QLabel::resizeEvent(t_event);
+}
+
 }  // namespace OUMP
