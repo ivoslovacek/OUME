@@ -50,7 +50,7 @@ class MediaDecoder {
     /**
      * @brief Index of the video stream to decode.
      */
-    int m_video_stream_index = 0;
+    std::optional<int> m_video_stream_index = 0;
 
     /**
      * @brief Audio codec for the media.

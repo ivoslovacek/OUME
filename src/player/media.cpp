@@ -43,16 +43,25 @@ void MediaFrame::onTick() {
     auto l_tmp = this->m_current_frame;
     this->m_current_frame = this->m_decoder->nextFrame();
 
-    auto l_pixmap =
-        QPixmap::fromImage(this->m_current_frame->getImage())
-            .scaledToHeight(this->height(), Qt::SmoothTransformation);
+    if (this->m_current_frame == nullptr) {
+        this->m_current_frame = this->m_decoder->nextFrame();
+    }
+
+    if (this->m_current_frame == nullptr) {
+        return;
+    }
+
+    auto l_pixmap = QPixmap::fromImage(this->m_current_frame->getImage())
+                        .scaled(this->width(), this->height(),
+                                Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     this->setPixmap(l_pixmap);
 }
 
 void MediaFrame::resizeEvent(QResizeEvent* t_event) {
     auto l_pixmap =
-        this->pixmap().scaledToHeight(this->height(), Qt::SmoothTransformation);
+        this->pixmap().scaled(this->width(), this->height(),
+                              Qt::KeepAspectRatio, Qt::SmoothTransformation);
     this->setPixmap(l_pixmap);
 
     QLabel::resizeEvent(t_event);

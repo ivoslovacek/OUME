@@ -1,7 +1,5 @@
 #include "player.hpp"
 
-#include <libavutil/mem.h>
-
 #include "ffmpeg/exceptions.hpp"
 
 extern "C" {
@@ -15,6 +13,7 @@ extern "C" {
 #include <libavutil/frame.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
+#include <libavutil/mem.h>
 #include <libswscale/swscale.h>
 }
 
@@ -24,6 +23,7 @@ extern "C" {
 #include <iostream>
 #include <memory>
 #include <new>
+#include <optional>
 #include <ostream>
 
 namespace OUMP {
@@ -44,8 +44,14 @@ MediaDecoder::MediaDecoder(std::string t_filename)
       m_video_context(nullptr),
       m_video_packet(nullptr),
       m_video_frame(nullptr),
+      m_video_stream_index(std::nullopt),
       m_audio_codec(nullptr),
       m_audio_context(nullptr) {
+#ifdef __DEBUG__
+    av_log_set_level(AV_LOG_TRACE);
+    av_log_set_callback(log_callback);
+#endif
+
     // allocate memory for media
     this->m_format_context = avformat_alloc_context();
     if (this->m_format_context == nullptr) {
@@ -60,83 +66,53 @@ MediaDecoder::MediaDecoder(std::string t_filename)
         throw OUMP::UnreadableFileException();
     }
 
-    // find the first codec for audio and video
-    // TODO: rewrite it to use av_find_best_stream
-    for (size_t i = 0; i < this->m_format_context->nb_streams; i++) {
-        AVCodecParameters *l_codec_param =
-            m_format_context->streams[i]->codecpar;
+    // try to find the best video codec
+    int l_stream_number =
+        av_find_best_stream(this->m_format_context, AVMEDIA_TYPE_VIDEO, -1, -1,
+                            &this->m_video_codec, 0);
 
-        if (l_codec_param->codec_type == AVMEDIA_TYPE_VIDEO) {
-            if (m_video_codec != nullptr) {
-                continue;
-            } else {
-                this->m_video_stream_index =
-                    m_format_context->streams[i]->index;
+    if (l_stream_number != AVERROR_STREAM_NOT_FOUND ||
+        l_stream_number != AVERROR_DECODER_NOT_FOUND ||
+        this->m_video_codec == nullptr) {
+        this->m_video_stream_index = l_stream_number;
 
-                // find suitable decoder for video
-                this->m_video_codec =
-                    avcodec_find_decoder(l_codec_param->codec_id);
+        // allocate memory for video context
+        this->m_video_context = avcodec_alloc_context3(this->m_video_codec);
+        if (this->m_video_context == nullptr) {
+            std::cerr << "Couldn't allocate memory for video context"
+                      << std::endl;
+            throw std::bad_alloc();
+        }
 
-                // allocate memory for video context
-                this->m_video_context =
-                    avcodec_alloc_context3(this->m_video_codec);
-                if (this->m_video_context == nullptr) {
-                    std::cerr << "Couldn't allocate memory for video context"
-                              << std::endl;
-                    throw std::bad_alloc();
-                }
+        // create video context from video parameters and initialize it
+        avcodec_parameters_to_context(
+            this->m_video_context,
+            this->m_format_context->streams[this->m_video_stream_index.value()]
+                ->codecpar);
+        avcodec_open2(this->m_video_context, this->m_video_codec, nullptr);
 
-                // create video context from video parameters and initialize it
-                avcodec_parameters_to_context(this->m_video_context,
-                                              l_codec_param);
-                avcodec_open2(this->m_video_context, this->m_video_codec,
-                              nullptr);
+        // alocate video packet
+        this->m_video_packet = av_packet_alloc();
+        if (this->m_video_packet == nullptr) {
+            std::cerr << "Couldn't allocate memory for video packet"
+                      << std::endl;
+            throw std::bad_alloc();
+        }
 
-                // alocate video packet
-                this->m_video_packet = av_packet_alloc();
-                if (this->m_video_packet == nullptr) {
-                    std::cerr << "Couldn't allocate memory for video packet"
-                              << std::endl;
-                    throw std::bad_alloc();
-                }
-
-                // alocate video frame
-                this->m_video_frame = av_frame_alloc();
-                if (this->m_video_frame == nullptr) {
-                    std::cerr << "Couldn't allocate memory for video frame"
-                              << std::endl;
-                    throw std::bad_alloc();
-                }
-            }
-        } else if (l_codec_param->codec_type == AVMEDIA_TYPE_AUDIO) {
-            if (m_audio_codec != nullptr) {
-                continue;
-            } else {
-                // find suitable decoder for audio
-                this->m_audio_codec =
-                    avcodec_find_decoder(l_codec_param->codec_id);
-
-                // allocate memory for audio context
-                this->m_audio_context =
-                    avcodec_alloc_context3(this->m_audio_codec);
-                if (this->m_audio_context == nullptr) {
-                    std::cerr << "Couldn't allocate memory for audio context"
-                              << std::endl;
-                    throw std::bad_alloc();
-                }
-
-                // create audio context from video parameters and initialize it
-                avcodec_parameters_to_context(this->m_audio_context,
-                                              l_codec_param);
-                avcodec_open2(this->m_audio_context, this->m_audio_codec,
-                              nullptr);
-            }
+        // alocate video frame
+        this->m_video_frame = av_frame_alloc();
+        if (this->m_video_frame == nullptr) {
+            std::cerr << "Couldn't allocate memory for video frame"
+                      << std::endl;
+            throw std::bad_alloc();
         }
     }
-
 #ifdef __DEBUG__
-    av_log_set_level(AV_LOG_TRACE);
-    av_log_set_callback(log_callback);
+    else {
+        std::cerr
+            << "Video stream or a decoder for a video stream couldn't be found"
+            << std::endl;
+    }
 #endif
 }
 
@@ -174,8 +150,10 @@ void MediaDecoder::decodeNextVideoPacket() {
         l_response =
             avcodec_send_packet(this->m_video_context, this->m_video_packet);
         if (l_response < 0) {
+#ifdef __DEBUG__
             std::cerr << "Error while sending a packet to the decoder"
                       << std::endl;
+#endif
             return;
         }
 
@@ -183,30 +161,35 @@ void MediaDecoder::decodeNextVideoPacket() {
             avcodec_receive_frame(this->m_video_context, this->m_video_frame);
 
         if (l_response < 0) {
-            std::cerr << "Neco se dojebalo: " << l_response << std::endl;
-        }
+#ifdef __DEBUG__
+            std::cerr << "Decoding error: " << l_response << std::endl;
+#endif
+        } else {
+            while (l_response >= 0) {
+                if (l_response == AVERROR(EAGAIN) ||
+                    l_response == AVERROR_EOF) {
+                    std::cerr << "EAGAIN OR EOF" << std::endl;
+                    break;
+                } else if (l_response < 0) {
+                    std::cerr
+                        << "Error while receiving a frame from the decoder"
+                        << std::endl;
+                    return;
+                }
 
-        while (l_response >= 0) {
-            if (l_response == AVERROR(EAGAIN) || l_response == AVERROR_EOF) {
-                std::cerr << "EAGAIN OR EOF" << std::endl;
-                break;
-            } else if (l_response < 0) {
-                std::cerr << "Error while receiving a frame from the decoder"
-                          << std::endl;
-                return;
+                this->m_frame_queue.push(
+                    std::make_shared<FrameData>(this->m_video_frame));
+
+                l_response = avcodec_receive_frame(this->m_video_context,
+                                                   this->m_video_frame);
             }
-
-            this->m_frame_queue.push(
-                std::make_shared<FrameData>(this->m_video_frame));
-
-            l_response = avcodec_receive_frame(this->m_video_context,
-                                               this->m_video_frame);
         }
 
         av_packet_unref(this->m_video_packet);
-
     } else {
+#ifdef __DEBUG__
         std::cerr << "Error while getting the next video frame" << std::endl;
+#endif
         return;
     }
 }
@@ -218,6 +201,10 @@ std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
 
     if (this->m_frame_queue.size() <= 1) {
         this->decodeNextVideoPacket();
+    }
+
+    if (this->m_frame_queue.size() == 0) {
+        return std::shared_ptr<FrameData>();
     }
 
     auto l_next_frame = this->m_frame_queue.front();
