@@ -92,7 +92,14 @@ class MediaDecoder {
      */
     int decodeNextVideoPacket();
 
+    /**
+     * @brief Starts the decoding of the media;
+     */
     void startDecoding();
+
+    /**
+     * @brief Stops the decoding of the media;
+     */
     void stopDecoding();
 
     /**
