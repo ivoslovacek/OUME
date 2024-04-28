@@ -134,6 +134,7 @@ MediaDecoder::MediaDecoder(std::string t_filename)
 
 MediaDecoder::~MediaDecoder() {
     this->m_decoding = false;
+    this->m_decoding_future->wait();
 
     avformat_close_input(&this->m_format_context);
     avformat_free_context(this->m_format_context);
@@ -249,7 +250,7 @@ void MediaDecoder::stopDecoding() {
     this->m_controls_mutex.lock();
 
     this->m_decoding = false;
-    this->m_decoding_future->get();
+    this->m_decoding_future->wait();
     this->m_decoding_future = std::nullopt;
 
     this->m_controls_mutex.unlock();
