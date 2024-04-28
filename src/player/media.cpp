@@ -32,6 +32,7 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
 
 void MediaFrame::handleNewFile(QString t_filename) {
     this->m_decoder = std::make_shared<MediaDecoder>(t_filename.toStdString());
+    this->m_decoder->startDecoding();
     this->m_playing = true;
 }
 
@@ -42,10 +43,6 @@ void MediaFrame::onTick() {
 
     auto l_tmp = this->m_current_frame;
     this->m_current_frame = this->m_decoder->nextFrame();
-
-    if (this->m_current_frame == nullptr) {
-        this->m_current_frame = this->m_decoder->nextFrame();
-    }
 
     if (this->m_current_frame == nullptr) {
         return;

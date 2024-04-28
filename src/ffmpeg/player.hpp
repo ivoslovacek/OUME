@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <future>
+#include <mutex>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec.h>
@@ -8,7 +10,6 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/frame.h>
 }
-
 #include <qimage.h>
 
 #include <memory>
@@ -31,59 +32,36 @@ struct FrameDataComparator {
  */
 class MediaDecoder {
    private:
-    /**
-     * @brief Media format context.
-     */
     AVFormatContext *m_format_context;
-    /**
-     * @brief Media file name.
-     */
     std::string m_filename;
 
-    /**
-     * @brief Video codec for the media.
-     */
     const AVCodec *m_video_codec;
-    /**
-     * @brief video context for the media.
-     */
     AVCodecContext *m_video_context;
-    /**
-     * @brief Video packet for the media.
-     */
     AVPacket *m_video_packet;
-    /**
-     * @brief Video frame for the media.
-     */
     AVFrame *m_video_frame;
-    /**
-     * @brief Index of the video stream to decode.
-     */
     std::optional<int> m_video_stream_index = 0;
 
-    /**
-     * @brief Audio codec for the media.
-     */
     const AVCodec *m_audio_codec;
-    /**
-     * @brief Audio context for the media.
-     */
     AVCodecContext *m_audio_context;
-
-    /**
-     * @brief Video frame queue for the media.
-     */
     std::priority_queue<std::shared_ptr<FrameData>,
                         std::vector<std::shared_ptr<FrameData>>,
                         FrameDataComparator>
         m_frame_queue;
+    std::shared_ptr<FrameData> m_frame_buffer;
+    std::mutex m_queue_mutex;
+
+    std::optional<std::future<void>> m_decoding_future;
+    bool m_decoding;
+    std::mutex m_controls_mutex;
+
+    void decodingLoop();
 
    public:
     /**
      * @brief Constructor for MediaDecoder.
      *
-     * This constructor takes the filename of the media file to be decoded as a
-     * QString argument.
+     * This constructor takes the filename of the media file to be decoded
+     * as a QString argument.
      *
      * @param t_filename The filename of the media file.
      */
@@ -108,8 +86,15 @@ class MediaDecoder {
      *
      * This function decodes the next video packet from the media file and
      * updates internal state.
+     *
+     * @return int Integer indicating if a frame was decoded succesfullu (see
+     * avcodec_receive_frame).
      */
-    void decodeNextVideoPacket();
+    int decodeNextVideoPacket();
+
+    void startDecoding();
+    void stopDecoding();
+
     /**
      * @brief Retrieves the next decoded frame from the decoder.
      *

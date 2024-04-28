@@ -1,5 +1,9 @@
 #include "player.hpp"
 
+#include <functional>
+#include <future>
+#include <mutex>
+
 #include "ffmpeg/exceptions.hpp"
 
 extern "C" {
@@ -50,7 +54,15 @@ MediaDecoder::MediaDecoder(std::string t_filename)
       m_video_frame(nullptr),
       m_video_stream_index(std::nullopt),
       m_audio_codec(nullptr),
-      m_audio_context(nullptr) {
+      m_audio_context(nullptr),
+      m_frame_queue(std::priority_queue<std::shared_ptr<FrameData>,
+                                        std::vector<std::shared_ptr<FrameData>>,
+                                        FrameDataComparator>()),
+      m_frame_buffer(std::shared_ptr<FrameData>()),
+      m_queue_mutex(std::mutex()),
+      m_decoding_future(std::nullopt),
+      m_decoding(false),
+      m_controls_mutex(std::mutex()) {
 #ifdef __DEBUG__
     av_log_set_level(AV_LOG_TRACE);
     av_log_set_callback(log_callback);
@@ -121,6 +133,8 @@ MediaDecoder::MediaDecoder(std::string t_filename)
 }
 
 MediaDecoder::~MediaDecoder() {
+    this->m_decoding = false;
+
     avformat_close_input(&this->m_format_context);
     avformat_free_context(this->m_format_context);
 
@@ -141,13 +155,13 @@ MediaDecoder::~MediaDecoder() {
     }
 }
 
-void MediaDecoder::decodeNextVideoPacket() {
+int MediaDecoder::decodeNextVideoPacket() {
     int l_response =
         av_read_frame(this->m_format_context, this->m_video_packet);
 
     if (this->m_video_packet->stream_index != this->m_video_stream_index) {
         av_packet_unref(this->m_video_packet);
-        return;
+        return -11;
     }
 
     if (l_response >= 0) {
@@ -158,7 +172,7 @@ void MediaDecoder::decodeNextVideoPacket() {
             std::cerr << "Error while sending a packet to the decoder"
                       << std::endl;
 #endif
-            return;
+            return l_response;
         }
 
         l_response =
@@ -173,16 +187,18 @@ void MediaDecoder::decodeNextVideoPacket() {
                 if (l_response == AVERROR(EAGAIN) ||
                     l_response == AVERROR_EOF) {
                     std::cerr << "EAGAIN OR EOF" << std::endl;
-                    break;
+                    return l_response;
                 } else if (l_response < 0) {
                     std::cerr
                         << "Error while receiving a frame from the decoder"
                         << std::endl;
-                    return;
+                    return l_response;
                 }
 
+                this->m_queue_mutex.lock();
                 this->m_frame_queue.push(
                     std::make_shared<FrameData>(this->m_video_frame));
+                this->m_queue_mutex.unlock();
 
                 l_response = avcodec_receive_frame(this->m_video_context,
                                                    this->m_video_frame);
@@ -194,26 +210,62 @@ void MediaDecoder::decodeNextVideoPacket() {
 #ifdef __DEBUG__
         std::cerr << "Error while getting the next video frame" << std::endl;
 #endif
-        return;
+    }
+
+    return l_response;
+}
+
+// TODO: move switching of the currently displayed frame here
+void MediaDecoder::decodingLoop() {
+    this->m_controls_mutex.lock();
+
+    while (this->m_decoding) {
+        this->m_controls_mutex.unlock();
+
+        while (this->m_frame_queue.size() <= 5) {
+            this->decodeNextVideoPacket();
+        }
+
+        this->m_controls_mutex.lock();
     }
 }
 
+void MediaDecoder::startDecoding() {
+    this->m_controls_mutex.lock();
+
+    if (this->m_decoding) {
+        return;
+    } else {
+        this->m_decoding = true;
+    }
+
+    this->m_decoding_future = std::async(
+        std::launch::async, std::bind(&MediaDecoder::decodingLoop, this));
+
+    this->m_controls_mutex.unlock();
+}
+
+void MediaDecoder::stopDecoding() {
+    this->m_controls_mutex.lock();
+
+    this->m_decoding = false;
+    this->m_decoding_future->get();
+    this->m_decoding_future = std::nullopt;
+
+    this->m_controls_mutex.unlock();
+}
+
 std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
-    if (this->m_frame_queue.size() <= 1) {
-        this->decodeNextVideoPacket();
+    if (this->m_queue_mutex.try_lock()) {
+        if (this->m_frame_queue.size() != 0) {
+            this->m_frame_buffer = this->m_frame_queue.top();
+            this->m_frame_queue.pop();
+        }
+
+        this->m_queue_mutex.unlock();
     }
 
-    if (this->m_frame_queue.size() <= 1) {
-        this->decodeNextVideoPacket();
-    }
-
-    if (this->m_frame_queue.size() == 0) {
-        return std::shared_ptr<FrameData>();
-    }
-
-    auto l_next_frame = this->m_frame_queue.top();
-    this->m_frame_queue.pop();
-    return l_next_frame;
+    return this->m_frame_buffer;
 }
 
 FrameData::FrameData(AVFrame *t_frame) : m_pts(t_frame->pts) {
