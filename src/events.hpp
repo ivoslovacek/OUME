@@ -14,6 +14,7 @@ class EventsHub : public QObject {
      * @brief Qt slot distributing a new file path.
      */
     void changedFileName(QString);
+    void changedPlayingState(bool);
 
    private:
     QString m_filename;
@@ -31,5 +32,7 @@ class EventsHub : public QObject {
      */
    public slots:
     void changeFileName(QString);
+
+    void changePlayingState(bool);
 };
 }  // namespace OUMP

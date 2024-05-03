@@ -4,7 +4,6 @@
 #include <qlabel.h>
 #include <qobject.h>
 #include <qpainter.h>
-#include <qt/QtCore/qcoreevent.h>
 #include <qtimer.h>
 #include <qtmetamacros.h>
 #include <qwidget.h>
@@ -23,6 +22,7 @@ class MediaFrame : public QLabel {
     Q_OBJECT
    private slots:
     void handleNewFile(QString t_filename);
+    void changePlayingState(bool);
     void onTick();
 
    private:

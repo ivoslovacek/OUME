@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "events.hpp"
+
 namespace OUMP {
 class PlayPauseButton;
 
@@ -15,9 +17,10 @@ class PlayPauseButton;
 class ControlsLayout : public QHBoxLayout {
    private:
     PlayPauseButton* m_play_pause;
+    std::shared_ptr<EventsHub> m_events;
 
    public:
-    ControlsLayout();
+    ControlsLayout(std::shared_ptr<EventsHub> t_events);
     ~ControlsLayout() = default;
 };
 
@@ -25,9 +28,15 @@ class ControlsLayout : public QHBoxLayout {
  * @brief Play/Pause button.
  */
 class PlayPauseButton : public QPushButton {
+    Q_OBJECT
+   signals:
+    void changedPlayingState(bool);
+
    private:
     bool m_playing = false;
-    void mousePressEvent(QMouseEvent* event) override;
+
+    void buttonPressed();
+    void mousePressEvent(QMouseEvent* t_event) override;
 
    public:
     PlayPauseButton();

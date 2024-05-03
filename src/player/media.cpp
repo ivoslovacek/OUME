@@ -9,8 +9,11 @@
 #include <qwidget.h>
 #include <qwindowdefs.h>
 
+#include <iostream>
 #include <memory>
+#include <ostream>
 
+#include "events.hpp"
 #include "ffmpeg/player.hpp"
 
 namespace OUMP {
@@ -23,6 +26,8 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
       m_playing(false) {
     connect(this->m_events.get(), &EventsHub::changedFileName, this,
             &MediaFrame::handleNewFile);
+    connect(this->m_events.get(), &EventsHub::changedPlayingState, this,
+            &MediaFrame::changePlayingState);
 
     connect(this->m_timer, &QTimer::timeout, this, &MediaFrame::onTick);
     this->m_timer->start(41);
@@ -34,6 +39,13 @@ void MediaFrame::handleNewFile(QString t_filename) {
     this->m_decoder = std::make_shared<MediaDecoder>(t_filename.toStdString());
     this->m_decoder->startDecoding();
     this->m_playing = true;
+}
+
+void MediaFrame::changePlayingState(bool t_state) {
+    this->m_playing = t_state;
+
+    this->m_playing ? this->m_decoder->startDecoding()
+                    : this->m_decoder->stopDecoding();
 }
 
 void MediaFrame::onTick() {
