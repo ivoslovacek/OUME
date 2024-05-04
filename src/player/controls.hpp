@@ -38,6 +38,9 @@ class PlayPauseButton : public QPushButton {
     void buttonPressed();
     void mousePressEvent(QMouseEvent* t_event) override;
 
+   public slots:
+    void changePlayingState(bool);
+
    public:
     PlayPauseButton();
     ~PlayPauseButton() = default;

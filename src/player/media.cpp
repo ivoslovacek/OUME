@@ -28,6 +28,8 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
             &MediaFrame::handleNewFile);
     connect(this->m_events.get(), &EventsHub::changedPlayingState, this,
             &MediaFrame::changePlayingState);
+    connect(this, &MediaFrame::changedPlayingState, this->m_events.get(),
+            &EventsHub::changePlayingState);
 
     connect(this->m_timer, &QTimer::timeout, this, &MediaFrame::onTick);
     this->m_timer->start(41);
@@ -39,6 +41,7 @@ void MediaFrame::handleNewFile(QString t_filename) {
     this->m_decoder = std::make_shared<MediaDecoder>(t_filename.toStdString());
     this->m_decoder->startDecoding();
     this->m_playing = true;
+    emit(this->changedPlayingState(this->m_playing));
 }
 
 void MediaFrame::changePlayingState(bool t_state) {

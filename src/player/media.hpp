@@ -20,6 +20,9 @@ namespace OUMP {
  */
 class MediaFrame : public QLabel {
     Q_OBJECT
+   signals:
+    void changedPlayingState(bool);
+
    private slots:
     void handleNewFile(QString t_filename);
     void changePlayingState(bool);
