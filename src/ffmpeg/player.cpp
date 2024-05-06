@@ -227,7 +227,16 @@ void MediaDecoder::decodingLoop() {
         this->m_controls_mutex.unlock();
 
         while (this->m_frame_queue.size() <= 5) {
-            this->decodeNextVideoPacket();
+            auto l_result = this->decodeNextVideoPacket();
+
+            if (l_result == AVERROR_EOF) {
+                std::cerr << "end of video" << std::endl;
+                this->m_controls_mutex.lock();
+                this->m_decoding = false;
+                this->m_finished = true;
+                this->m_controls_mutex.unlock();
+                break;
+            }
         }
 
         this->m_controls_mutex.lock();

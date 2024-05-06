@@ -52,8 +52,12 @@ class MediaDecoder {
 
     std::optional<std::future<void>> m_decoding_future;
     bool m_decoding;
+    bool m_finished = false;
     std::mutex m_controls_mutex;
 
+    /**
+     * @brief Main decoding loop.
+     */
     void decodingLoop();
 
    public:
@@ -101,6 +105,24 @@ class MediaDecoder {
      * @brief Stops the decoding of the media;
      */
     void stopDecoding();
+
+    /**
+     * @brief Returns a bool indicating if there is no more media to be
+     * presented.
+     */
+    inline bool GetMediaEOFStatus() {
+        this->m_controls_mutex.lock();
+        this->m_queue_mutex.lock();
+
+        bool l_result = (this->m_frame_queue.size() == 0 && this->m_finished)
+                            ? true
+                            : false;
+
+        this->m_controls_mutex.unlock();
+        this->m_queue_mutex.unlock();
+
+        return l_result;
+    }
 
     /**
      * @brief Retrieves the next decoded frame from the decoder.

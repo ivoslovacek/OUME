@@ -63,6 +63,10 @@ void MediaFrame::onTick() {
         return;
     }
 
+    if (this->m_decoder->GetMediaEOFStatus()) {
+        emit this->changedPlayingState(false);
+    }
+
     auto l_pixmap = QPixmap::fromImage(this->m_current_frame->getImage())
                         .scaled(this->width(), this->height(),
                                 Qt::KeepAspectRatio, Qt::SmoothTransformation);
