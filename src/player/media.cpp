@@ -2,6 +2,7 @@
 
 #include <qimage.h>
 #include <qlabel.h>
+#include <qmessagebox.h>
 #include <qnamespace.h>
 #include <qpainter.h>
 #include <qsizepolicy.h>
@@ -9,11 +10,10 @@
 #include <qwidget.h>
 #include <qwindowdefs.h>
 
-#include <iostream>
 #include <memory>
-#include <ostream>
 
 #include "events.hpp"
+#include "ffmpeg/exceptions.hpp"
 #include "ffmpeg/player.hpp"
 
 namespace OUMP {
@@ -38,10 +38,21 @@ MediaFrame::MediaFrame(std::shared_ptr<EventsHub> t_events)
 };
 
 void MediaFrame::handleNewFile(QString t_filename) {
-    this->m_decoder = std::make_shared<MediaDecoder>(t_filename.toStdString());
-    this->m_decoder->startDecoding();
-    this->m_playing = true;
-    emit(this->changedPlayingState(this->m_playing));
+    if (t_filename.isEmpty()) {
+        return;
+    }
+
+    try {
+        this->m_decoder =
+            std::make_shared<MediaDecoder>(t_filename.toStdString());
+        this->m_decoder->startDecoding();
+        this->m_playing = true;
+        emit(this->changedPlayingState(this->m_playing));
+    } catch (const UnreadableFileException& e) {
+        QMessageBox l_error(QMessageBox::Critical, "Error", e.what(),
+                            QMessageBox::Ok);
+        l_error.exec();
+    }
 }
 
 void MediaFrame::changePlayingState(bool t_state) {
