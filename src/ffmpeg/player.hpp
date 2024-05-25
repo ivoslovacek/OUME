@@ -1,30 +1,42 @@
 #pragma once
 
-#include <cstdint>
-#include <future>
-#include <mutex>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec.h>
 #include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
 #include <libavutil/frame.h>
+#include <libavutil/opt.h>
+#include <libswresample/swresample.h>
 }
 #include <qimage.h>
 
+#include <cstdint>
+#include <future>
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
 
 namespace OUMP {
 class FrameData;
+class SamplesData;
 /**
- * @brief FrameDataComparator
+ * @brief FrameData Comparator
  */
 struct FrameDataComparator {
    public:
     bool operator()(const std::shared_ptr<FrameData> &a,
                     const std::shared_ptr<FrameData> &b);
+};
+
+/**
+ * @brief SamplesData Comparator
+ */
+struct SamplesDataComparator {
+   public:
+    bool operator()(const std::shared_ptr<SamplesData> &a,
+                    const std::shared_ptr<SamplesData> &b);
 };
 
 /**
@@ -43,10 +55,18 @@ class MediaDecoder {
 
     const AVCodec *m_audio_codec;
     AVCodecContext *m_audio_context;
+    SwrContext *m_audio_swr_context;
+    std::optional<int> m_audio_stream_index = 0;
+
     std::priority_queue<std::shared_ptr<FrameData>,
                         std::vector<std::shared_ptr<FrameData>>,
                         FrameDataComparator>
         m_frame_queue;
+    std::priority_queue<std::shared_ptr<SamplesData>,
+                        std::vector<std::shared_ptr<SamplesData>>,
+                        SamplesDataComparator>
+        m_samples_queue;
+
     std::shared_ptr<FrameData> m_frame_buffer;
     std::mutex m_queue_mutex;
 
@@ -176,6 +196,32 @@ class FrameData {
      * @return A const reference to the QImage containing the decoded image.
      */
     inline const QImage &getImage() const { return this->m_image; }
+
+    /**
+     * @brief Getter function for the frame presentation timestamp.
+     *
+     * @return int64_t containing the presentation timestamp.
+     */
+    inline int64_t getPts() const { return this->m_pts; }
+};
+
+class SamplesData {
+   private:
+    uint8_t *m_data;
+    size_t m_size;
+
+    /**
+     * @brief int64_t containing the presentation time stamp of the samples.
+     */
+    int64_t m_pts;
+
+   public:
+    SamplesData(AVFrame *t_frame);
+    ~SamplesData();
+
+    inline size_t getSize() const { return this->m_size; }
+
+    inline const uint8_t *getData() const { return this->m_data; }
 
     /**
      * @brief Getter function for the frame presentation timestamp.

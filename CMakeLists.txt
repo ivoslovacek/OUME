@@ -33,9 +33,10 @@ pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
     libswscale
     libavutil
 )
+pkg_check_modules(PULSEAUDIO REQUIRED IMPORTED_TARGET libpulse-simple libpulse)
 
-find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets Multimedia)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Multimedia)
 set(CMAKE_AUTOMOC ON)
 
 file(GLOB SOURCES "src/*/*.cpp" "src/*.cpp")
@@ -43,7 +44,8 @@ file(GLOB SOURCES "src/*/*.cpp" "src/*.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
     PkgConfig::LIBAV
+    PkgConfig::PULSEAUDIO
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Multimedia)
 
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
