@@ -2,6 +2,8 @@
 
 #include <qboxlayout.h>
 #include <qpushbutton.h>
+#include <qslider.h>
+#include <qtmetamacros.h>
 #include <qwidget.h>
 
 #include <memory>
@@ -10,6 +12,7 @@
 
 namespace OUMP {
 class PlayPauseButton;
+class VolumeSlider;
 
 /**
  * @brief Media controls layout.
@@ -17,6 +20,7 @@ class PlayPauseButton;
 class ControlsLayout : public QHBoxLayout {
    private:
     PlayPauseButton* m_play_pause;
+    VolumeSlider* m_volume_slider;
     std::shared_ptr<EventsHub> m_events;
 
    public:
@@ -46,5 +50,11 @@ class PlayPauseButton : public QPushButton {
     ~PlayPauseButton() = default;
 
     inline bool getState() const { return this->m_playing; };
+};
+
+class VolumeSlider : public QSlider {
+   public:
+    VolumeSlider(QWidget* t_parent = nullptr);
+    ~VolumeSlider() = default;
 };
 }  // namespace OUMP
