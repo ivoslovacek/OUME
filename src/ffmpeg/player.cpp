@@ -2,6 +2,9 @@
 
 #include <qaudioformat.h>
 
+#include <chrono>
+#include <cstdlib>
+#include <limits>
 #include <stdexcept>
 
 #include "ffmpeg/exceptions.hpp"
@@ -59,7 +62,6 @@ bool SamplesDataComparator::operator()(const std::shared_ptr<SamplesData> &a,
 MediaDecoder::MediaDecoder(QString t_filename)
     : MediaDecoder(t_filename.toStdString()) {}
 
-// TODO: create a mechanism for unified audio decoding
 MediaDecoder::MediaDecoder(std::string t_filename)
     : m_filename(t_filename),
       m_video_codec(nullptr),
@@ -72,8 +74,9 @@ MediaDecoder::MediaDecoder(std::string t_filename)
       m_frame_queue(std::priority_queue<std::shared_ptr<FrameData>,
                                         std::vector<std::shared_ptr<FrameData>>,
                                         FrameDataComparator>()),
-      m_frame_buffer(std::shared_ptr<FrameData>()),
       m_queue_mutex(std::mutex()),
+      m_frame_buffer(std::shared_ptr<FrameData>()),
+      m_buffer_mutex(std::mutex()),
       m_decoding_future(std::nullopt),
       m_decoding(false),
       m_controls_mutex(std::mutex()) {
@@ -95,6 +98,8 @@ MediaDecoder::MediaDecoder(std::string t_filename)
     if (!l_mediaOpened) {
         throw OUMP::UnreadableFileException();
     }
+
+    avformat_find_stream_info(this->m_format_context, nullptr);
 
     // try to find the best video codec
     int l_stream_number =
@@ -209,7 +214,6 @@ MediaDecoder::~MediaDecoder() {
 }
 
 int MediaDecoder::decodeNextVideoPacket() {
-    std::cerr << "tady";
     int l_response =
         av_read_frame(this->m_format_context, this->m_video_packet);
 
@@ -245,6 +249,10 @@ int MediaDecoder::decodeNextVideoPacket() {
                         return l_response;
                     }
 
+                    this->m_video_frame->time_base =
+                        this->m_format_context
+                            ->streams[this->m_video_stream_index.value()]
+                            ->time_base;
                     this->m_queue_mutex.lock();
                     this->m_frame_queue.push(
                         std::make_shared<FrameData>(this->m_video_frame));
@@ -297,6 +305,10 @@ int MediaDecoder::decodeNextVideoPacket() {
                         return l_response;
                     }
 
+                    this->m_video_frame->time_base =
+                        this->m_format_context
+                            ->streams[this->m_audio_stream_index.value()]
+                            ->time_base;
                     this->m_samples_queue.push(
                         std::make_shared<SamplesData>(this->m_video_frame));
 
@@ -320,10 +332,7 @@ int MediaDecoder::decodeNextVideoPacket() {
     }
 }
 
-// TODO: move switching of the currently displayed frame here
 void MediaDecoder::decodingLoop() {
-    this->m_controls_mutex.lock();
-
     auto l_sample_rate =
         static_cast<uint32_t>(this->m_audio_context->sample_rate);
     static const pa_sample_spec l_sample_spec = {PA_SAMPLE_S16LE, l_sample_rate,
@@ -338,9 +347,37 @@ void MediaDecoder::decodingLoop() {
         std::cerr << "failed to initialize audio playback: "
                   << pa_strerror(error) << std::endl;
 #endif
-        throw std::bad_alloc();
+        throw std::runtime_error("failed to initialize audio playback");
     }
 
+    while (this->m_frame_queue.size() <= 5 ||
+           this->m_samples_queue.size() <= 5) {
+        auto l_result = this->decodeNextVideoPacket();
+
+        if (l_result == AVERROR_EOF) {
+#ifdef __DEBUG__
+            std::cerr << "end of video" << std::endl;
+#endif
+            this->m_controls_mutex.lock();
+            this->m_decoding = false;
+            this->m_finished = true;
+            this->m_controls_mutex.unlock();
+            break;
+        }
+    }
+
+    this->m_queue_mutex.lock();
+    auto l_last_pts = (this->m_frame_queue.top()->getPts() <
+                       this->m_samples_queue.top()->getPts())
+                          ? this->m_frame_queue.top()->getPts()
+                          : this->m_samples_queue.top()->getPts();
+    this->m_queue_mutex.unlock();
+    this->m_current_pts = l_last_pts;
+
+    auto l_clock_start = std::chrono::steady_clock::now() -
+                         std::chrono::microseconds(l_last_pts);
+
+    this->m_controls_mutex.lock();
     while (this->m_decoding) {
         this->m_controls_mutex.unlock();
 
@@ -352,6 +389,7 @@ void MediaDecoder::decodingLoop() {
 #ifdef __DEBUG__
                 std::cerr << "end of video" << std::endl;
 #endif
+
                 this->m_controls_mutex.lock();
                 this->m_decoding = false;
                 this->m_finished = true;
@@ -360,19 +398,40 @@ void MediaDecoder::decodingLoop() {
             }
         }
 
-        while (!this->m_samples_queue.empty()) {
-            auto l_sample = this->m_samples_queue.top();
-            this->m_samples_queue.pop();
-            std::cerr << l_sample->getSize() << std::endl;
+        this->m_current_pts = static_cast<int64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                (std::chrono::steady_clock::now() - l_clock_start))
+                .count());
 
-            if (pa_simple_write(l_pulse_audio, l_sample->getData(),
-                                l_sample->getSize(), &error) < 0) {
+        if (!this->m_samples_queue.empty()) {
+            auto l_sample = this->m_samples_queue.top();
+
+            if (l_sample->getPts() <= this->m_current_pts) {
+                this->m_samples_queue.pop();
+
+                if (pa_simple_write(l_pulse_audio, l_sample->getData(),
+                                    l_sample->getSize(), &error) < 0) {
 #ifdef __DEBUG__
-                std::cerr << "pa_simple_write() failed: " << pa_strerror(error)
-                          << std::endl;
+                    std::cerr
+                        << "pa_simple_write() failed: " << pa_strerror(error)
+                        << std::endl;
 #endif
+                }
             }
         }
+
+        this->m_queue_mutex.lock();
+        if (!this->m_frame_queue.empty()) {
+            auto l_frame = this->m_frame_queue.top();
+
+            if (l_frame->getPts() <= this->m_current_pts) {
+                this->m_frame_queue.pop();
+                this->m_buffer_mutex.lock();
+                this->m_frame_buffer = l_frame;
+                this->m_buffer_mutex.unlock();
+            }
+        }
+        this->m_queue_mutex.unlock();
 
         this->m_controls_mutex.lock();
     }
@@ -406,24 +465,64 @@ void MediaDecoder::stopDecoding() {
     this->m_decoding = false;
     this->m_controls_mutex.unlock();
 
-    this->m_decoding_future->wait();
-    this->m_decoding_future = std::nullopt;
+    if (this->m_decoding_future.has_value()) {
+        this->m_decoding_future->wait();
+        this->m_decoding_future = std::nullopt;
+    }
 }
 
-std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
-    if (this->m_queue_mutex.try_lock()) {
-        if (this->m_frame_queue.size() != 0) {
-            this->m_frame_buffer = this->m_frame_queue.top();
-            this->m_frame_queue.pop();
-        }
+void MediaDecoder::seekMedia(int64_t t_timepoint) {
+    this->stopDecoding();
 
+    if (this->m_video_stream_index.has_value()) {
+        auto l_tmp = static_cast<int64_t>(
+            t_timepoint /
+            (1000000 * av_q2d(this->m_format_context
+                                  ->streams[this->m_video_stream_index.value()]
+                                  ->time_base)));
+        av_seek_frame(this->m_format_context,
+                      this->m_video_stream_index.value(), l_tmp,
+                      AVSEEK_FLAG_BACKWARD);
+
+        this->m_queue_mutex.lock();
+        this->m_frame_queue =
+            std::priority_queue<std::shared_ptr<FrameData>,
+                                std::vector<std::shared_ptr<FrameData>>,
+                                FrameDataComparator>();
         this->m_queue_mutex.unlock();
     }
 
-    return this->m_frame_buffer;
+    if (this->m_audio_stream_index.has_value()) {
+        auto l_tmp = static_cast<int64_t>(
+            t_timepoint /
+            (1000000 * av_q2d(this->m_format_context
+                                  ->streams[this->m_audio_stream_index.value()]
+                                  ->time_base)));
+        av_seek_frame(this->m_format_context,
+                      this->m_audio_stream_index.value(), l_tmp,
+                      AVSEEK_FLAG_BACKWARD);
+
+        while (!this->m_samples_queue.empty()) {
+            this->m_samples_queue.pop();
+        }
+    }
+
+    avformat_flush(this->m_format_context);
+
+    this->startDecoding();
 }
 
-FrameData::FrameData(AVFrame *t_frame) : m_pts(t_frame->pts) {
+std::shared_ptr<FrameData> MediaDecoder::nextFrame() {
+    if (this->m_buffer_mutex.try_lock()) {
+        auto l_frame = this->m_frame_buffer;
+        this->m_buffer_mutex.unlock();
+        return l_frame;
+    }
+    return std::shared_ptr<FrameData>();
+}
+
+FrameData::FrameData(AVFrame *t_frame)
+    : m_pts(t_frame->pts), m_time_base(t_frame->time_base) {
     SwsContext *scaler_ctx =
         sws_getContext(t_frame->width, t_frame->height,
                        static_cast<AVPixelFormat>(t_frame->format),
@@ -463,7 +562,8 @@ FrameData::FrameData(AVFrame *t_frame) : m_pts(t_frame->pts) {
     av_frame_free(&l_frame);
     sws_freeContext(scaler_ctx);
 }
-SamplesData::SamplesData(AVFrame *t_frame) : m_pts(t_frame->pts) {
+SamplesData::SamplesData(AVFrame *t_frame)
+    : m_pts(t_frame->pts), m_time_base(t_frame->time_base) {
     SwrContext *l_swr_ctx = nullptr;
 
     AVChannelLayout l_output_layout;

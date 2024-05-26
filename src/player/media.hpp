@@ -9,6 +9,7 @@
 #include <qwidget.h>
 #include <qwindowdefs.h>
 
+#include <cstdint>
 #include <memory>
 
 #include "events.hpp"
@@ -22,19 +23,23 @@ class MediaFrame : public QLabel {
     Q_OBJECT
    signals:
     void changedPlayingState(bool);
+    void changedMediaTimepoint(int64_t);
+    void changedMediaEndTimepoint(int64_t);
 
    private slots:
     void handleNewFile(QString t_filename);
     void changePlayingState(bool);
-    void onTick();
+    void changeVolume(int);
+    void changeMediaTimepoint(int64_t);
 
    private:
     std::shared_ptr<EventsHub> m_events;
-    QTimer* m_timer;
 
     std::shared_ptr<MediaDecoder> m_decoder;
     std::shared_ptr<FrameData> m_current_frame;
     bool m_playing;
+
+    void paintEvent(QPaintEvent* t_event) override;
 
    public:
     MediaFrame(std::shared_ptr<EventsHub> t_events);

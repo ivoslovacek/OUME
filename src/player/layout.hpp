@@ -8,6 +8,7 @@
 #include "events.hpp"
 #include "player/controls.hpp"
 #include "player/media.hpp"
+#include "player/seekslider.hpp"
 
 namespace OUMP {
 /**
@@ -17,6 +18,7 @@ class PlayerLayout : public QVBoxLayout {
    private:
     std::shared_ptr<EventsHub> m_events;
     ControlsLayout* m_controls;
+    SeekSliderLayout* m_seek_slider;
     MediaFrame* m_media;
 
    public:

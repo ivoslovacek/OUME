@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+#include <iostream>
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec.h>
@@ -62,17 +64,20 @@ class MediaDecoder {
                         std::vector<std::shared_ptr<FrameData>>,
                         FrameDataComparator>
         m_frame_queue;
+    std::mutex m_queue_mutex;
     std::priority_queue<std::shared_ptr<SamplesData>,
                         std::vector<std::shared_ptr<SamplesData>>,
                         SamplesDataComparator>
         m_samples_queue;
 
     std::shared_ptr<FrameData> m_frame_buffer;
-    std::mutex m_queue_mutex;
+    std::mutex m_buffer_mutex;
 
     std::optional<std::future<void>> m_decoding_future;
     bool m_decoding;
     bool m_finished = false;
+    float m_volume = 1.00;
+    std::atomic<int64_t> m_current_pts;
     std::mutex m_controls_mutex;
 
     /**
@@ -126,6 +131,8 @@ class MediaDecoder {
      */
     void stopDecoding();
 
+    void seekMedia(int64_t);
+
     /**
      * @brief Returns a bool indicating if there is no more media to be
      * presented.
@@ -143,6 +150,18 @@ class MediaDecoder {
 
         return l_result;
     }
+
+    inline int64_t getDuration() const {
+        return this->m_format_context->duration;
+    }
+
+    inline void setVolume(float t_volume) {
+        this->m_controls_mutex.lock();
+        this->m_volume = t_volume;
+        this->m_controls_mutex.unlock();
+    }
+
+    inline int64_t getCurrentPts() const { return this->m_current_pts; }
 
     /**
      * @brief Retrieves the next decoded frame from the decoder.
@@ -170,6 +189,8 @@ class FrameData {
      * @brief int64_t containing the presentation time stamp of the frame.
      */
     int64_t m_pts;
+
+    AVRational m_time_base;
 
    public:
     /**
@@ -202,7 +223,11 @@ class FrameData {
      *
      * @return int64_t containing the presentation timestamp.
      */
-    inline int64_t getPts() const { return this->m_pts; }
+    inline int64_t getPts() const {
+        return static_cast<int64_t>(
+            static_cast<double>(this->m_pts * av_q2d(this->m_time_base)) *
+            1000 * 1000);
+    }
 };
 
 class SamplesData {
@@ -215,19 +240,25 @@ class SamplesData {
      */
     int64_t m_pts;
 
+    AVRational m_time_base;
+
    public:
     SamplesData(AVFrame *t_frame);
     ~SamplesData();
 
     inline size_t getSize() const { return this->m_size; }
 
-    inline const uint8_t *getData() const { return this->m_data; }
+    inline uint8_t *getData() { return this->m_data; }
 
     /**
      * @brief Getter function for the frame presentation timestamp.
      *
      * @return int64_t containing the presentation timestamp.
      */
-    inline int64_t getPts() const { return this->m_pts; }
+    inline int64_t getPts() const {
+        return static_cast<int64_t>(
+            static_cast<double>(this->m_pts * av_q2d(this->m_time_base)) *
+            1000 * 1000);
+    }
 };
 }  // namespace OUMP
