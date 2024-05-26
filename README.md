@@ -47,7 +47,8 @@ cmake .. -DCMAKE_BUILD_TYPE=Debug
 
 ## Important notes
 
-This isn't a great video player by anymeans, but it gets the job done.
+- This isn't a great video player by anymeans, but it gets the job done.
+- For some reason, Qt doesn't want to display the video without resizing the window first, after manually resizing it works well.
 
 ### Why should you use it?
 
